@@ -11,7 +11,8 @@ import pytest
 
 from embeddings import DIMENSION, cache_key, load_cache
 from index import (
-    CHROMA_DIR, EMBEDDINGS_FILE, Article, chunk_article, chunk_record, initial_chunks, open_collection, split_pieces,
+    CHROMA_DIR, CHUNK_LIMIT, EMBEDDINGS_FILE, Article, chunk_article, chunk_record, document_for, heading,
+    initial_chunks, open_collection, split_pieces,
 )
 
 ARTICLES_FILE = Path(__file__).resolve().parent.parent / "index" / "articles.jsonl"
@@ -119,7 +120,8 @@ def test_the_chunks_of_every_article_rejoin_into_the_article_and_keep_its_fields
     for record in articles:
         chunks = chunk_article(Article(**record), limit)
 
-        assert "\n".join(chunk.text for chunk in chunks) == record["text"]
+        if not document_for(record["source"]).table_row:  # table chunks repeat their provision: checked below
+            assert "\n".join(chunk.text for chunk in chunks) == record["text"]
         for part, chunk in enumerate(chunks, 1):
             assert chunk.part == part
             assert chunk.words == len(chunk.text.split())
@@ -146,6 +148,20 @@ def test_a_chunk_over_the_limit_is_a_single_piece_with_nowhere_to_cut(articles, 
             if chunk.words > limit:
                 assert split_pieces(chunk.text) == [chunk.text]
 
+
+def test_the_fee_table_of_the_norma_is_cut_between_rows_and_every_chunk_repeats_the_provision(articles):
+    primero = of(articles, "norma-01-2023.pdf")[0]
+    lines = primero["text"].splitlines()
+    opening, rows = lines[:6], lines[6:]  # the sentence of PRIMERO and the column headings, then 149 fees
+
+    chunks = chunk_article(Article(**primero), CHUNK_LIMIT)
+
+    assert len(rows) == 149 and all(AMOUNT.search(row) for row in rows)
+    assert len(chunks) > 1
+    assert all(chunk.words <= CHUNK_LIMIT for chunk in chunks)
+    assert all(chunk.text.splitlines()[:6] == opening for chunk in chunks)
+    assert [row for chunk in chunks for row in chunk.text.splitlines()[6:]] == rows  # each row once, whole, in order
+    assert all(heading(chunk).endswith(" — PRIMERO") for chunk in chunks)
 
 # --- the saved search index (read from disk; nothing below calls the API) ---
 

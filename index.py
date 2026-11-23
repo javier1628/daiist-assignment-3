@@ -12,13 +12,18 @@ stores everything in ChromaDB. All of it is saved in index/:
 - chroma/: the search index (vectors, text and metadata of every chunk)
 
 Running the stage again sends nothing that already has a saved vector.
+server.py imports `add_document` from here, so a document added later goes
+through exactly the same steps.
 
 The per-file steps are functions so that server.py's add-document tool can
 import them.
 """
 
+import atexit
 import json
 import re
+import shutil
+import tempfile
 from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field
@@ -139,6 +144,7 @@ class Document:
     ordinal_headings: bool = False  # provisions are headed PRIMERO:, SEGUNDO: ... instead of Artículo N
     one_item_per_chunk: frozenset[int] = frozenset()  # articles chunked one numbered item at a time
     in_initial_index: bool = True  # False for a document left to be added later through the add-document tool
+    table_row: re.Pattern[str] | None = None  # a line that is one row of a table, in a document that has tables
 
 
 @dataclass
@@ -182,9 +188,15 @@ DOCUMENTS = {
             name="Norma General 01-2023, ajuste de las tasas por servicios de la DGA",
             ordinal_headings=True,
             in_initial_index=False,
+            table_row=re.compile(r"(?:RD|US)\$ [\d,]+\.\d\d$"),  # a fee: "... RD$ 4,000.00"
         ),
     )
 }
+
+
+def document_for(filename: str) -> Document:
+    """The settings of a file: its own when it is a document of the corpus, the defaults otherwise."""
+    return DOCUMENTS.get(filename) or Document(filename=filename, url="", name=Path(filename).stem)
 
 
 def removal_rule(document: Document, text: str, page_number: int, position: int, previous_rule: str | None) -> str | None:
@@ -260,6 +272,7 @@ def apply_fixes(document: Document, lines: list[Line]) -> list[Line]:
 ARTICLE_HEADING = re.compile(r"(?:Art[íi]culo|ART[ÍI]CULO)\s*(\d+)")
 HEADING_MARKER = re.compile(r"(?:Art[íi]culo|ART[ÍI]CULO)\s*\d+[\s.,:\-]*")
 ORDINALS = {"PRIMERO": 1, "SEGUNDO": 2, "TERCERO": 3, "CUARTO": 4}
+ORDINAL_NAMES = {number: name for name, number in ORDINALS.items()}
 ORDINAL_HEADING = re.compile(r"(PRIMERO|SEGUNDO|TERCERO|CUARTO):")
 
 # "TÍTULO II", "CAPITULO v", "Sección I", "SECCIÓN ÚNICA", alone on a line. One trailing token is
@@ -469,6 +482,22 @@ def pack(pieces: list[str], limit: int) -> list[str]:
     return packed
 
 
+def split_table(piece: str, row: re.Pattern[str], limit: int) -> list[str]:
+    """Cut a table that is over the limit between its rows, never inside one.
+
+    Every part starts with what comes before the first row (the sentence of the
+    provision and the column headings), so a part read alone still says what
+    its rows are. That opening counts towards the limit.
+    """
+    lines = piece.splitlines()
+    first = next((position for position, line in enumerate(lines) if row.search(line)), None)
+    if first is None:
+        return [piece]
+    opening = "\n".join(lines[:first])
+    parts = pack(lines[first:], limit - len(opening.split()))
+    return [f"{opening}\n{part}" if opening else part for part in parts]
+
+
 def chunk_article(article: Article, limit: int) -> list[Chunk]:
     """Cut an article into chunks of at most `limit` words, where its boundaries allow.
 
@@ -476,9 +505,11 @@ def chunk_article(article: Article, limit: int) -> list[Chunk]:
     into pieces (see PIECE_START) and consecutive pieces are packed together up
     to the limit; a piece that is over the limit by itself stays whole. Articles
     named in the document's `one_item_per_chunk` ignore the limit: every piece
-    is a chunk, the opening lines going with the first one.
+    is a chunk, the opening lines going with the first one. In a document with
+    tables, a piece still over the limit is cut between table rows.
     """
-    if article.number in DOCUMENTS[article.source].one_item_per_chunk:
+    document = document_for(article.source)
+    if article.number in document.one_item_per_chunk:
         opening, *items = split_pieces(article.text)
         if not items:
             raise ValueError(
@@ -490,6 +521,12 @@ def chunk_article(article: Article, limit: int) -> list[Chunk]:
         texts = [article.text]
     else:
         texts = pack(split_pieces(article.text), limit)
+        if document.table_row:
+            texts = [
+                part
+                for text in texts
+                for part in (split_table(text, document.table_row, limit) if len(text.split()) > limit else [text])
+            ]
     return [
         Chunk(
             source=article.source,
@@ -527,9 +564,34 @@ def heading_path(chunk: Chunk) -> str:
     return " / ".join(level for level in (chunk.titulo, chunk.capitulo, chunk.seccion) if level)
 
 
+def article_label(source: str, number: int) -> str:
+    """How a provision is named: "Artículo 80", or its ordinal in a document headed by ordinals."""
+    if document_for(source).ordinal_headings:
+        return ORDINAL_NAMES[number]
+    return f"Artículo {number}"
+
+
 def heading(chunk: Chunk) -> str:
     """One line that places a chunk: its document, article, title and the headings above it."""
-    parts = (DOCUMENTS[chunk.source].name, f"Artículo {chunk.number}", chunk.title, heading_path(chunk))
+    parts = (
+        document_for(chunk.source).name,
+        article_label(chunk.source, chunk.number),
+        chunk.title,
+        heading_path(chunk),
+    )
+    return " — ".join(part for part in parts if part)
+
+
+def citation(metadata: Mapping) -> str:
+    """Where a stored chunk comes from: document, article, title, part, the article's start page and file."""
+    parts = (
+        document_for(metadata["source"]).name,
+        article_label(metadata["source"], metadata["article"]),
+        metadata["title"],
+        f"part {metadata['part']}",
+        f"page {metadata['page']}",
+        metadata["source"],
+    )
     return " — ".join(part for part in parts if part)
 
 
@@ -564,6 +626,20 @@ def open_collection(folder: Path = CHROMA_DIR, create: bool = False):
             COLLECTION, configuration={"hnsw": {"space": "cosine"}}, embedding_function=None
         )
     return client.get_collection(COLLECTION, embedding_function=None)
+
+
+def open_snapshot(folder: Path = CHROMA_DIR):
+    """Open a temporary copy of the saved search index, for reading.
+
+    ChromaDB writes a lock record into its SQLite file every time it is opened.
+    Reading from a copy keeps the committed files in index/ exactly as they are.
+    """
+    if not folder.is_dir():
+        raise FileNotFoundError(f"{folder} is missing. Run `uv run python main.py index` first.")
+    parent = Path(tempfile.mkdtemp(prefix="corpus-index-"))
+    atexit.register(shutil.rmtree, parent, ignore_errors=True)
+    shutil.copytree(folder, parent / "chroma")
+    return open_collection(parent / "chroma")
 
 
 def store_chunks(collection, chunks: list[Chunk], vectors: Mapping[str, Sequence[float]]) -> tuple[int, int]:
@@ -604,10 +680,55 @@ def nearest(collection, vector: Sequence[float], k: int) -> list[dict]:
     ]
 
 
-def search(question: str, k: int = 5) -> list[dict]:
-    """The k chunks closest to a question. Only a question never asked before reaches the API."""
-    vector = embeddings.embed_query(question, QUERY_EMBEDDINGS_FILE, embeddings.gemini_embedder())
-    return nearest(open_collection(), vector, k)
+@dataclass
+class AddResult:
+    source: str
+    chunks: int  # chunks the document has in the index after the call
+    added: int  # chunks written: new ones, and ones whose content changed
+    removed: int  # chunks deleted, and old versions of the ones that changed
+    unchanged: int  # chunks that were already stored exactly as they are now
+    sent: int  # texts sent to the embedding API
+    stopped: str = ""  # why nothing was stored, when the embedding could not finish
+
+
+def index_document(chunks: list[Chunk], collection, embed: embeddings.Embed, cache_path: Path = EMBEDDINGS_FILE) -> AddResult:
+    """Put the chunks of one document in the index, in place of whatever it had there.
+
+    If every chunk is already stored unchanged, nothing is embedded or written.
+    Otherwise only the texts without a saved vector are sent to `embed`, and the
+    index is updated only once every chunk has its vector.
+    """
+    sources = {chunk.source for chunk in chunks}
+    if len(sources) != 1:
+        raise ValueError(f"index_document takes the chunks of exactly one document, not of {len(sources)}.")
+    (source,) = sources
+    stored = collection.get(where={"source": source}, include=["documents", "metadatas"])
+    current = dict(zip(stored["ids"], zip(stored["documents"], stored["metadatas"])))
+    wanted = {chunk_id: (text, metadata) for chunk_id, text, metadata in map(chunk_record, chunks)}
+    unchanged = sum(current.get(chunk_id) == record for chunk_id, record in wanted.items())
+    result = AddResult(source=source, chunks=len(current), added=0, removed=0, unchanged=unchanged, sent=0)
+    if unchanged == len(wanted) == len(current):
+        return result
+    run = embeddings.embed_missing([embedded_text(chunk) for chunk in chunks], cache_path, embed)
+    result.sent = run.sent
+    if run.remaining:
+        result.stopped = run.stopped
+        return result
+    store_chunks(collection, chunks, embeddings.load_cache(cache_path))
+    result.added, result.removed, result.chunks = len(wanted) - unchanged, len(current) - unchanged, len(wanted)
+    return result
+
+
+def add_document(path: Path, collection, embed: embeddings.Embed, cache_path: Path = EMBEDDINGS_FILE) -> AddResult:
+    """Run a PDF through the whole pipeline (extract, clean, split, chunk, heading, embed, store)."""
+    path = Path(path)
+    if not path.is_file():
+        raise FileNotFoundError(f"There is no file at {path}.")
+    if path.suffix.lower() != ".pdf":
+        raise ValueError(f"{path.name} is not a PDF. Only PDF files can be added.")
+    articles, _ = process(document_for(path.name), path)
+    chunks = [chunk for article in articles for chunk in chunk_article(article, CHUNK_LIMIT)]
+    return index_document(chunks, collection, embed, cache_path)
 
 
 # ---------------------------------------------------------------------------

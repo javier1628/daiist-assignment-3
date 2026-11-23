@@ -191,3 +191,43 @@ def test_an_article_set_to_one_item_per_chunk_that_has_no_items_is_an_error():
 
     with pytest.raises(ValueError, match="article 4"):
         chunk_article(without_items, 500)
+
+
+# --- fee tables (norma-01-2023) ----------------------------------------------
+
+FEE_TABLE = (
+    "PRIMERO: Se ajustan por inflación las tasas de los servicios",  # 10 words
+    "brindados por la DGA:",  # 4
+    "NOMBRE DE SERVICIO MONEDA COSTO",  # 5
+    "ADQUISICIÓN CERTIFICADO DIGITAL RD$ 4,000.00",  # 5
+    "CAMBIO DE VINCULACIÓN DE USUARIO SUSCRITO RD$ 750.00",  # 8
+    "CERTIFICACIÓN CLASIFICACIÓN ARANCELARIA RD$ 750.00",  # 5
+    "CUSTODIO ESPECIAL-12 HORAS RD$ 2,580.00",  # 5
+)
+OPENING_OF_THE_PROVISION = "\n".join(FEE_TABLE[:3])  # 19 words: everything before the first row
+
+
+def test_a_fee_table_is_cut_between_rows_and_every_chunk_repeats_its_provision():
+    provision = article(*FEE_TABLE, source="norma-01-2023.pdf", number=1)  # 42 words
+
+    chunks = chunk_article(provision, 30)
+
+    assert [chunk.text for chunk in chunks] == [
+        f"{OPENING_OF_THE_PROVISION}\n{FEE_TABLE[3]}",
+        f"{OPENING_OF_THE_PROVISION}\n{FEE_TABLE[4]}",
+        f"{OPENING_OF_THE_PROVISION}\n{FEE_TABLE[5]}\n{FEE_TABLE[6]}",
+    ]
+    assert [chunk.words for chunk in chunks] == [24, 27, 29]
+    assert [chunk.part for chunk in chunks] == [1, 2, 3]
+
+
+def test_a_fee_table_that_fits_the_limit_is_one_chunk():
+    provision = article(*FEE_TABLE, source="norma-01-2023.pdf", number=1)
+
+    assert [chunk.text for chunk in chunk_article(provision, 42)] == [provision.text]
+
+
+def test_documents_without_tables_are_never_cut_between_lines():
+    same_text = article(*FEE_TABLE, source="decreto-755-22.pdf", number=1)
+
+    assert [chunk.text for chunk in chunk_article(same_text, 30)] == [same_text.text]

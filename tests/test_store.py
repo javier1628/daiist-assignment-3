@@ -1,7 +1,21 @@
 """From chunks to the saved search index. Vectors are made up here: no test calls the Gemini API."""
 
-from embeddings import cache_key
-from index import Chunk, embedded_text, heading, nearest, open_collection, store_chunks
+import pytest
+
+from embeddings import QuotaStop, cache_key, load_cache
+from index import (
+    Chunk,
+    add_document,
+    citation,
+    chunk_record,
+    document_for,
+    embedded_text,
+    heading,
+    index_document,
+    nearest,
+    open_collection,
+    store_chunks,
+)
 
 TITULO = "TÍTULO II: DE ADUANAS Y EL CONTROL ADUANERO"
 CAPITULO = "CAPÍTULO I: DEL TERRITORIO ADUANERO"
@@ -110,3 +124,107 @@ def test_nearest_returns_the_closest_chunks_first_with_what_a_citation_needs(tmp
         "ley-168-21.pdf", 6, 1, 12,
     )
     assert results[0]["distance"] < results[1]["distance"]
+
+
+# --- ordinal provisions and documents the corpus does not know ---------------
+
+NORMA = "Norma General 01-2023, ajuste de las tasas por servicios de la DGA"
+SEGUNDO = chunk(
+    2, 1, "SEGUNDO: Disponemos que estos ajustes se apliquen.", source="norma-01-2023.pdf",
+    title="", titulo="", capitulo="", page=9,
+)
+
+
+def test_a_provision_headed_by_an_ordinal_is_named_by_it_not_as_an_article():
+    assert heading(SEGUNDO) == f"{NORMA} — SEGUNDO"
+    assert embedded_text(SEGUNDO) == f"title: {NORMA} — SEGUNDO | text: SEGUNDO: Disponemos que estos ajustes se apliquen."
+
+
+def test_a_citation_gives_document_article_title_part_and_start_page():
+    assert citation(chunk_record(SIX_B)[2]) == (
+        "Ley 168-21 de Aduanas — Artículo 6 — Zona de jurisdicción aduanera — part 2 — page 12 — ley-168-21.pdf"
+    )
+    assert citation(chunk_record(SEGUNDO)[2]) == f"{NORMA} — SEGUNDO — part 1 — page 9 — norma-01-2023.pdf"
+
+
+def test_a_file_the_corpus_does_not_know_gets_default_settings_and_its_file_name_as_name():
+    unknown = document_for("resolucion-12-2024.pdf")
+
+    assert (unknown.filename, unknown.name, unknown.ordinal_headings) == ("resolucion-12-2024.pdf", "resolucion-12-2024", False)
+    assert document_for("ley-168-21.pdf").name == "Ley 168-21 de Aduanas"
+    assert heading(chunk(3, 1, "Artículo 3.- Texto.", source="resolucion-12-2024.pdf", title="", titulo="", capitulo="")) == (
+        "resolucion-12-2024 — Artículo 3"
+    )
+
+
+# --- adding a document, with a fake embedder ---------------------------------
+
+
+class FakeEmbedder:
+    def __init__(self, stop: bool = False):
+        self.sent: list[str] = []
+        self.stop = stop
+
+    def __call__(self, texts: list[str]) -> list[list[float]]:
+        if self.stop:
+            raise QuotaStop("daily quota reached")
+        self.sent += texts
+        return [[float(len(text))] + [1.0] * 767 for text in texts]
+
+
+def test_a_new_document_is_embedded_and_stored(tmp_path):
+    collection, embedder = open_collection(tmp_path / "chroma", create=True), FakeEmbedder()
+
+    result = index_document([FIVE, SIX_A, SIX_B], collection, embedder, tmp_path / "embeddings.jsonl")
+
+    assert (result.added, result.removed, result.unchanged, result.sent, result.stopped) == (3, 0, 0, 3, "")
+    assert sorted(embedder.sent) == sorted(embedded_text(item) for item in (FIVE, SIX_A, SIX_B))
+    assert collection.count() == 3
+
+
+def test_a_document_already_indexed_and_unchanged_is_skipped_without_the_embedder(tmp_path):
+    collection, cache = open_collection(tmp_path / "chroma", create=True), tmp_path / "embeddings.jsonl"
+    index_document([FIVE, SIX_A], collection, FakeEmbedder(), cache)
+
+    def no_embedding(texts):
+        raise AssertionError("the embedder was called")
+
+    result = index_document([FIVE, SIX_A], collection, no_embedding, cache)
+
+    assert (result.added, result.removed, result.unchanged, result.sent) == (0, 0, 2, 0)
+
+
+def test_a_document_whose_content_changed_has_its_chunks_replaced(tmp_path):
+    collection, cache = open_collection(tmp_path / "chroma", create=True), tmp_path / "embeddings.jsonl"
+    index_document([FIVE, SIX_A, SIX_B], collection, FakeEmbedder(), cache)
+    index_document([DECREE], collection, FakeEmbedder(), cache)
+    reworded = chunk(5, 1, "Artículo 5.- Territorio aduanero. Texto corregido.")
+    embedder = FakeEmbedder()
+
+    result = index_document([reworded, SIX_A], collection, embedder, cache)
+
+    assert (result.added, result.removed, result.unchanged, result.sent) == (1, 2, 1, 1)
+    assert embedder.sent == [embedded_text(reworded)]  # the unchanged chunk is not sent again
+    assert sorted(collection.get()["ids"]) == ["decreto-609-24.pdf#6#1", "ley-168-21.pdf#5#1", "ley-168-21.pdf#6#1"]
+
+
+def test_a_quota_stop_leaves_the_index_as_it_was(tmp_path):
+    collection, cache = open_collection(tmp_path / "chroma", create=True), tmp_path / "embeddings.jsonl"
+
+    result = index_document([FIVE, SIX_A], collection, FakeEmbedder(stop=True), cache)
+
+    assert (result.added, result.removed, result.sent) == (0, 0, 0)
+    assert result.stopped == "daily quota reached"
+    assert collection.count() == 0
+    assert load_cache(cache) == {}
+
+
+def test_only_an_existing_pdf_can_be_added(tmp_path):
+    collection = open_collection(tmp_path / "chroma", create=True)
+    notes = tmp_path / "notes.txt"
+    notes.write_text("Artículo 1.- Texto.", encoding="utf-8")
+
+    with pytest.raises(FileNotFoundError, match="missing.pdf"):
+        add_document(tmp_path / "missing.pdf", collection, FakeEmbedder(), tmp_path / "embeddings.jsonl")
+    with pytest.raises(ValueError, match="PDF"):
+        add_document(notes, collection, FakeEmbedder(), tmp_path / "embeddings.jsonl")
