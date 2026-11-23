@@ -1,0 +1,91 @@
+{
+  "ley-168-21.pdf": {
+    "extraction": "pdfplumber_pages",
+    "pages": 230,
+    "lines_extracted": 6978,
+    "lines_removed": {
+      "header: CONGRESO NACIONAL": 213,
+      "header: ASUNTO: Ley de Aduanas de la República Dominicana.": 250,
+      "header: PAG.": 226,
+      "page number after PAG.": 195,
+      "page number": 0,
+      "page number with a stray character": 0,
+      "single stray character": 265,
+      "only glyph placeholders": 1,
+      "junk line inside a heading name": 18
+    },
+    "glyph_placeholders_deleted": 19,
+    "heading_name_tokens_deleted": 5,
+    "hand_fixes": [
+      [
+        "Artículo 22 9.-",
+        "Artículo 229.-"
+      ]
+    ],
+    "preamble_words": 1334,
+    "closing_words": 210,
+    "articles": 420,
+    "article_words": 46936
+  },
+  "decreto-755-22.pdf": {
+    "extraction": "pypdf_page_layer",
+    "pages": 135,
+    "lines_extracted": 4708,
+    "lines_removed": {
+      "header: LUIS ABINADER": 135,
+      "header: PRESIDENTE DE LA REPÚBLICA DOMINICANA": 135,
+      "page number": 69,
+      "page number with a stray character": 8,
+      "single stray character": 83,
+      "only glyph placeholders": 0,
+      "junk line inside a heading name": 0
+    },
+    "glyph_placeholders_deleted": 0,
+    "heading_name_tokens_deleted": 0,
+    "hand_fixes": [],
+    "preamble_words": 759,
+    "closing_words": 46,
+    "articles": 318,
+    "article_words": 49016
+  },
+  "decreto-609-24.pdf": {
+    "extraction": "pdfplumber_pages",
+    "pages": 38,
+    "lines_extracted": 1399,
+    "lines_removed": {
+      "header: LUIS ABINADER": 38,
+      "header: PRESIDENTE DE LA REPÚBLICA DOMINICANA": 38,
+      "page number": 34,
+      "page number with a stray character": 1,
+      "single stray character": 28,
+      "only glyph placeholders": 0,
+      "junk line inside a heading name": 0
+    },
+    "glyph_placeholders_deleted": 0,
+    "heading_name_tokens_deleted": 0,
+    "hand_fixes": [],
+    "preamble_words": 979,
+    "closing_words": 41,
+    "articles": 64,
+    "article_words": 13665
+  },
+  "norma-01-2023.pdf": {
+    "extraction": "pdfplumber_pages",
+    "pages": 10,
+    "lines_extracted": 372,
+    "lines_removed": {
+      "page number": 10,
+      "page number with a stray character": 0,
+      "single stray character": 0,
+      "only glyph placeholders": 0,
+      "junk line inside a heading name": 0
+    },
+    "glyph_placeholders_deleted": 0,
+    "heading_name_tokens_deleted": 0,
+    "hand_fixes": [],
+    "preamble_words": 1860,
+    "closing_words": 32,
+    "articles": 4,
+    "article_words": 1841
+  }
+}
