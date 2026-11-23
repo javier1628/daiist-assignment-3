@@ -2,9 +2,16 @@
 Assignment 3: build the index (`main.py index`).
 
 So far this stage downloads the corpus into corpus/ (git-ignored), extracts the
-text of each PDF, cleans it and splits it into articles, saved in index/.
-The chunking rule is written (`chunk_article`) but the stage does not apply it
-yet: scripts/describe_corpus.py uses it for a dry run. Embedding is not written.
+text of each PDF, cleans it and splits it into articles. It then cuts the
+articles into chunks, embeds the chunks that have no saved vector yet and
+stores everything in ChromaDB. All of it is saved in index/:
+
+- articles.jsonl, cleaning_report.json: the cleaned articles and what was removed
+- embeddings.jsonl: every chunk vector received from the API, by hash
+- query_embeddings.jsonl: the same for questions
+- chroma/: the search index (vectors, text and metadata of every chunk)
+
+Running the stage again sends nothing that already has a saved vector.
 
 The per-file steps are functions so that server.py's add-document tool can
 import them.
@@ -13,19 +20,28 @@ import them.
 import json
 import re
 from collections import Counter
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+import chromadb
 import httpx
 import pdfplumber
+from chromadb.config import Settings
 from pypdf import PdfReader
+
+import embeddings
 
 ROOT = Path(__file__).resolve().parent
 CORPUS_DIR = ROOT / "corpus"
 INDEX_DIR = ROOT / "index"
 ARTICLES_FILE = INDEX_DIR / "articles.jsonl"
 REPORT_FILE = INDEX_DIR / "cleaning_report.json"
+EMBEDDINGS_FILE = INDEX_DIR / "embeddings.jsonl"  # chunk vectors, by hash of the embedded text
+QUERY_EMBEDDINGS_FILE = INDEX_DIR / "query_embeddings.jsonl"  # question vectors, same format
+CHROMA_DIR = INDEX_DIR / "chroma"
+COLLECTION = "corpus"
+CHUNK_LIMIT = 400  # words per chunk, chosen from the dry run in CORPUS.md
 
 Line = tuple[int, str]  # (page number, text)
 
@@ -115,12 +131,14 @@ DECREE_HEADERS = (
 class Document:
     filename: str
     url: str
+    name: str  # how the document is called in the heading line of its chunks
     extract: Callable[[Path], list[str]] = pdfplumber_pages  # returns the text of each page
     headers: tuple[tuple[str, re.Pattern[str]], ...] = ()  # (rule name, whole-line pattern)
     page_number_after: str | None = None  # header rule that is followed by a garbled page number
     fixes: tuple[tuple[str, str], ...] = ()  # hand corrections: (text as extracted, corrected text)
     ordinal_headings: bool = False  # provisions are headed PRIMERO:, SEGUNDO: ... instead of Artículo N
     one_item_per_chunk: frozenset[int] = frozenset()  # articles chunked one numbered item at a time
+    in_initial_index: bool = True  # False for a document left to be added later through the add-document tool
 
 
 @dataclass
@@ -136,6 +154,7 @@ DOCUMENTS = {
         Document(
             filename="ley-168-21.pdf",
             url="https://oea.aduanas.gob.do/media/1499/ley_general_aduanas_168-21.pdf",
+            name="Ley 168-21 de Aduanas",
             headers=LEY_HEADERS,
             page_number_after="header: PAG.",
             fixes=(("Artículo 22 9.-", "Artículo 229.-"),),
@@ -147,18 +166,22 @@ DOCUMENTS = {
                 "https://oea.aduanas.gob.do/media/1500/decreto-755-22-reglamento-de-aplicaci%C3%B3n"
                 "-de-la-ley-n%C3%BAm-168-21-de-aduanas.pdf"
             ),
+            name="Decreto 755-22, Reglamento de aplicación de la Ley 168-21 de Aduanas",
             extract=pypdf_page_layer,
             headers=DECREE_HEADERS,
         ),
         Document(
             filename="decreto-609-24.pdf",
             url="https://aduanas.gob.do/media/zcflhflg/decreto-609-24-reglamento-operadores-aduaneros.pdf",
+            name="Decreto 609-24, Reglamento de aplicación del Título III de la Ley 168-21 de Aduanas",
             headers=DECREE_HEADERS,
         ),
         Document(
             filename="norma-01-2023.pdf",
             url="https://aduanas.gob.do/media/as3hx2ml/norma-general-01-2023-ajuste-tasas-por-servicios.pdf",
+            name="Norma General 01-2023, ajuste de las tasas por servicios de la DGA",
             ordinal_headings=True,
+            in_initial_index=False,
         ),
     )
 }
@@ -416,6 +439,7 @@ class Chunk:
     capitulo: str
     seccion: str
     part: int  # position of the chunk inside its article, from 1
+    page: int  # page the article starts on
     words: int
     text: str
 
@@ -475,11 +499,115 @@ def chunk_article(article: Article, limit: int) -> list[Chunk]:
             capitulo=article.capitulo,
             seccion=article.seccion,
             part=part,
+            page=article.page,
             words=len(text.split()),
             text=text,
         )
         for part, text in enumerate(texts, 1)
     ]
+
+
+def initial_chunks(articles: list[Article]) -> list[Chunk]:
+    """The chunks of the initial index: every document except those left for the add-document tool."""
+    return [
+        chunk
+        for article in articles
+        if DOCUMENTS[article.source].in_initial_index
+        for chunk in chunk_article(article, CHUNK_LIMIT)
+    ]
+
+
+# ---------------------------------------------------------------------------
+# The search index
+# ---------------------------------------------------------------------------
+
+
+def heading_path(chunk: Chunk) -> str:
+    """The título, capítulo and sección above a chunk, in one string."""
+    return " / ".join(level for level in (chunk.titulo, chunk.capitulo, chunk.seccion) if level)
+
+
+def heading(chunk: Chunk) -> str:
+    """One line that places a chunk: its document, article, title and the headings above it."""
+    parts = (DOCUMENTS[chunk.source].name, f"Artículo {chunk.number}", chunk.title, heading_path(chunk))
+    return " — ".join(part for part in parts if part)
+
+
+def embedded_text(chunk: Chunk) -> str:
+    """Exactly what is sent to the embedding model for a chunk: its heading as title, then its text."""
+    return embeddings.document_prompt(heading(chunk), chunk.text)
+
+
+def chunk_record(chunk: Chunk) -> tuple[str, str, dict]:
+    """A chunk's id, text and metadata, as the collection stores them."""
+    text = embedded_text(chunk)
+    metadata = {
+        "source": chunk.source,
+        "article": chunk.number,
+        "part": chunk.part,
+        "title": chunk.title,
+        "path": heading_path(chunk),
+        "page": chunk.page,
+        "embedded_text": text,
+        "embedding_key": embeddings.cache_key(text),  # where its vector is in the embedding cache
+    }
+    return f"{chunk.source}#{chunk.number}#{chunk.part}", chunk.text, metadata
+
+
+def open_collection(folder: Path = CHROMA_DIR, create: bool = False):
+    """Open the saved search index. It reads files only: nothing here can call the API."""
+    if not create and not folder.is_dir():
+        raise FileNotFoundError(f"{folder} is missing. Run `uv run python main.py index` first.")
+    client = chromadb.PersistentClient(path=str(folder), settings=Settings(anonymized_telemetry=False))
+    if create:
+        return client.get_or_create_collection(
+            COLLECTION, configuration={"hnsw": {"space": "cosine"}}, embedding_function=None
+        )
+    return client.get_collection(COLLECTION, embedding_function=None)
+
+
+def store_chunks(collection, chunks: list[Chunk], vectors: Mapping[str, Sequence[float]]) -> tuple[int, int]:
+    """Make the collection hold exactly these chunks for the documents they come from.
+
+    A chunk already stored unchanged is not touched, a chunk its document no
+    longer produces is deleted, and other documents are left alone. `vectors`
+    is the embedding cache. Returns how many chunks were written and deleted.
+    """
+    wanted = {chunk_id: (text, metadata) for chunk_id, text, metadata in map(chunk_record, chunks)}
+    sources = sorted({chunk.source for chunk in chunks})
+    stored = collection.get(where={"source": {"$in": sources}}, include=["documents", "metadatas"])
+    current = dict(zip(stored["ids"], zip(stored["documents"], stored["metadatas"])))
+    stale = [chunk_id for chunk_id in current if chunk_id not in wanted]
+    changed = [chunk_id for chunk_id, record in wanted.items() if current.get(chunk_id) != record]
+    if stale:
+        collection.delete(ids=stale)
+    if changed:
+        collection.upsert(
+            ids=changed,
+            documents=[wanted[chunk_id][0] for chunk_id in changed],
+            metadatas=[wanted[chunk_id][1] for chunk_id in changed],
+            embeddings=[vectors[wanted[chunk_id][1]["embedding_key"]] for chunk_id in changed],
+        )
+    return len(changed), len(stale)
+
+
+def nearest(collection, vector: Sequence[float], k: int) -> list[dict]:
+    """The k stored chunks closest to a vector, closest first, each with its text and metadata."""
+    found = collection.query(
+        query_embeddings=[vector], n_results=k, include=["documents", "metadatas", "distances"]
+    )
+    return [
+        {"id": chunk_id, "distance": distance, "text": text, **metadata}
+        for chunk_id, distance, text, metadata in zip(
+            found["ids"][0], found["distances"][0], found["documents"][0], found["metadatas"][0]
+        )
+    ]
+
+
+def search(question: str, k: int = 5) -> list[dict]:
+    """The k chunks closest to a question. Only a question never asked before reaches the API."""
+    vector = embeddings.embed_query(question, QUERY_EMBEDDINGS_FILE, embeddings.gemini_embedder())
+    return nearest(open_collection(), vector, k)
 
 
 # ---------------------------------------------------------------------------
@@ -563,6 +691,32 @@ def main() -> None:
             f"{sum(entry['lines_removed'].values())} of {entry['lines_extracted']} lines removed"
         )
     print(f"Wrote {ARTICLES_FILE.relative_to(ROOT)} and {REPORT_FILE.relative_to(ROOT)}")
+
+    chunks = initial_chunks(articles)
+    left_out = ", ".join(document.filename for document in DOCUMENTS.values() if not document.in_initial_index)
+    print(f"{len(chunks):,} chunks of at most {CHUNK_LIMIT} words (left out: {left_out})", flush=True)
+    run = embeddings.embed_missing(
+        [embedded_text(chunk) for chunk in chunks], EMBEDDINGS_FILE, embeddings.gemini_embedder()
+    )
+    print(
+        f"Embeddings ({embeddings.MODEL}, {embeddings.DIMENSION} values): {run.sent:,} texts sent to the API in "
+        f"this run, {run.saved:,} saved in {EMBEDDINGS_FILE.relative_to(ROOT)}, {run.remaining:,} remaining"
+    )
+    if run.remaining:
+        # Not an error exit: main.py would turn that into a traceback, and nothing is lost.
+        print(
+            f"STOPPED BEFORE THE END: {run.stopped}\n"
+            f"{run.saved:,} texts have a saved vector and {run.remaining:,} do not. Run "
+            f"`uv run python main.py index` again and only those {run.remaining:,} are sent. "
+            f"{CHROMA_DIR.relative_to(ROOT)}/ was not updated."
+        )
+        return
+    collection = open_collection(create=True)
+    written, deleted = store_chunks(collection, chunks, embeddings.load_cache(EMBEDDINGS_FILE))
+    print(
+        f"{CHROMA_DIR.relative_to(ROOT)}/: {written:,} chunks written, {deleted:,} deleted, "
+        f"{collection.count():,} stored"
+    )
 
 
 if __name__ == "__main__":

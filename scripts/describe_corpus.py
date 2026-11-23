@@ -53,7 +53,7 @@ SHORT_LINE_CHARS = 6  # lines this short that survive cleaning are listed as pos
 SHORT_LINES_SHOWN = 12
 EXTRACTION_LABELS = {"pdfplumber_pages": "pdfplumber", "pypdf_page_layer": "pypdf, page layer only"}
 CHUNK_LIMITS = (200, 300, 400, 500)  # chunk sizes, in words, tried by the dry run
-ADDED_LATER = ("norma-01-2023.pdf",)  # will come in through the add-document tool, so the dry run leaves it out
+ADDED_LATER = tuple(d.filename for d in index.DOCUMENTS.values() if not d.in_initial_index)  # left for the add-document tool
 LETTERED_ITEM = re.compile(r"[a-zñ]\)\s*\S")  # "a) ...", which the chunking rule does not cut at
 PREVIEW_CHARS = 60  # of the start of a piece, to identify it
 

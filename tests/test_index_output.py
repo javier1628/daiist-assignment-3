@@ -1,13 +1,18 @@
-"""Checks on index/articles.jsonl, the file `main.py index` writes from the real PDFs."""
+"""Checks on what `main.py index` saves in index/ from the real PDFs: the articles and the search index."""
 
 import json
 import re
+import shutil
 from collections import Counter
 from pathlib import Path
 
+import numpy as np
 import pytest
 
-from index import Article, chunk_article, split_pieces
+from embeddings import DIMENSION, cache_key, load_cache
+from index import (
+    CHROMA_DIR, EMBEDDINGS_FILE, Article, chunk_article, chunk_record, initial_chunks, open_collection, split_pieces,
+)
 
 ARTICLES_FILE = Path(__file__).resolve().parent.parent / "index" / "articles.jsonl"
 LIMITS = (200, 300, 400, 500)  # the chunk sizes of the dry run in CORPUS.md
@@ -140,3 +145,43 @@ def test_a_chunk_over_the_limit_is_a_single_piece_with_nowhere_to_cut(articles, 
         for chunk in chunk_article(Article(**record), limit):
             if chunk.words > limit:
                 assert split_pieces(chunk.text) == [chunk.text]
+
+
+# --- the saved search index (read from disk; nothing below calls the API) ---
+
+
+@pytest.fixture(scope="module")
+def chunks(articles) -> list:
+    return initial_chunks([Article(**record) for record in articles])
+
+
+@pytest.fixture(scope="module")
+def stored(tmp_path_factory) -> dict:
+    """Everything in the saved index, read from a copy: ChromaDB writes to its files whenever it is opened."""
+    copy = tmp_path_factory.mktemp("index") / "chroma"
+    shutil.copytree(CHROMA_DIR, copy)
+    return open_collection(copy).get(include=["documents", "metadatas", "embeddings"])
+
+
+def test_the_search_index_holds_every_chunk_of_the_three_documents_and_none_of_the_norma(chunks, stored):
+    assert sorted(stored["ids"]) == sorted(chunk_record(chunk)[0] for chunk in chunks)
+    assert {metadata["source"] for metadata in stored["metadatas"]} == {
+        "ley-168-21.pdf", "decreto-755-22.pdf", "decreto-609-24.pdf",
+    }
+
+
+def test_each_stored_chunk_has_its_raw_text_its_embedded_text_and_its_metadata(chunks, stored):
+    wanted = {chunk_id: (text, metadata) for chunk_id, text, metadata in map(chunk_record, chunks)}
+
+    for chunk_id, text, metadata in zip(stored["ids"], stored["documents"], stored["metadatas"]):
+        assert (text, metadata) == wanted[chunk_id]
+        assert metadata["embedded_text"].endswith(f" | text: {text}")
+
+
+def test_every_stored_vector_is_the_one_saved_for_its_embedded_text(chunks, stored):
+    cache = load_cache(EMBEDDINGS_FILE)
+
+    assert len(stored["ids"]) == len(chunks)
+    for metadata, vector in zip(stored["metadatas"], stored["embeddings"]):
+        assert len(vector) == DIMENSION
+        assert np.allclose(vector, cache[cache_key(metadata["embedded_text"])], atol=1e-6)
