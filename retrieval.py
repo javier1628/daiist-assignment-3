@@ -165,8 +165,20 @@ class Retriever:
         return [self.records[chunk_id] for chunk_id in ids]
 
 
+# A citation tag, as index.citation_tag writes it: "[Ley 168-21, art. 80]", "[Norma 01-2023, PRIMERO]".
+CITATION_TAG = re.compile(r"\[[^\[\],]+, (?:art\. \d+|[A-ZÁÉÍÓÚÑ]+)\]")
+# The citation line that opens each chunk of a search result: the tag, then the full citation.
+RESULT_LINE = re.compile(rf"^({CITATION_TAG.pattern}) .+ — part \d+ — page \d+ — \S+$", re.MULTILINE)
+
+
 def format_results(results: list[dict]) -> str:
-    """Each chunk as a numbered citation line followed by its text."""
+    """Each chunk as a citation line followed by its text. The line opens with the tag to cite the chunk by."""
     return "\n\n".join(
-        f"[{number}] {index.citation(result)}\n{result['text']}" for number, result in enumerate(results, 1)
+        f"{index.citation_tag(result['source'], result['article'])} {index.citation(result)}\n{result['text']}"
+        for result in results
     )
+
+
+def result_tags(text: str) -> list[str]:
+    """The citation tags of the chunks in a search result, in order."""
+    return RESULT_LINE.findall(text)

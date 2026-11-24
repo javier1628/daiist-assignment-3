@@ -4,7 +4,7 @@ import pytest
 
 from embeddings import cache_key
 from index import Chunk, embedded_text, open_collection, store_chunks
-from retrieval import BM25, Retriever, Setting, format_results, fuse, read_setting, tokens
+from retrieval import BM25, CITATION_TAG, Retriever, Setting, format_results, fuse, read_setting, result_tags, tokens
 
 
 def chunk(number: int, text: str, title: str, source: str = "ley-168-21.pdf") -> Chunk:
@@ -114,9 +114,25 @@ def test_results_are_shown_as_a_numbered_citation_followed_by_the_text(retriever
     results = retriever.search("subasta", [0.0, 1.0, 0.0], Setting("vector", 1))
 
     assert format_results(results) == (
-        "[1] Ley 168-21 de Aduanas — Artículo 124 — Precio base de la subasta — part 1 — page 134 — ley-168-21.pdf\n"
+        "[Ley 168-21, art. 124] Ley 168-21 de Aduanas — Artículo 124 — Precio base de la subasta — part 1 — page 134"
+        " — ley-168-21.pdf\n"
         "Artículo 124.- El precio base de la subasta incluye los tributos."
     )
+
+
+def test_the_tags_of_a_search_result_are_read_back_from_its_citation_lines(retriever):
+    text = format_results(retriever.search("subasta", [0.0, 1.0, 0.0], Setting("vector", 3)))
+
+    # 124 matches the vector; 112 and 80 tie at zero and come in the order of their chunk ids
+    assert result_tags(text) == ["[Ley 168-21, art. 124]", "[Ley 168-21, art. 112]", "[Ley 168-21, art. 80]"]
+    assert result_tags("Párrafo: véase [Ley 168-21, art. 5] en el texto.") == []  # only citation lines count
+
+
+def test_tags_written_inside_an_answer_are_all_found():
+    answer = "La base es el valor [Ley 168-21, art. 80]. La norma fija tasas [Norma 01-2023, PRIMERO] y [Ley 168-21, art. 80]."
+
+    assert CITATION_TAG.findall(answer) == ["[Ley 168-21, art. 80]", "[Norma 01-2023, PRIMERO]", "[Ley 168-21, art. 80]"]
+    assert CITATION_TAG.findall("según el artículo 80 [1] y [Ley 168-21, arts. 80 y 81]") == []
 
 
 def test_keywords_match_whichever_side_lost_its_accents(tmp_path):

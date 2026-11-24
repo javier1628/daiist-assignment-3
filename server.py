@@ -64,10 +64,11 @@ def search(query: str) -> str:
     their basis, declarations, customs regimes, deadlines, agents and operators, offences and penalties.
     Write the query in Spanish, as a full question or as key terms.
 
-    Returns the best passages, best first. Each one starts with a citation line: its number in brackets, the
-    document, the article, the article's title, which part of the article the passage is, the page the article
-    starts on and the file name. The text of the passage follows. The text comes from scanned documents, so it
-    has occasional stray characters. If none of the passages answers the question, the corpus does not cover it.
+    Returns the best passages, best first. Each one starts with a citation line: the tag to cite the passage by,
+    such as [Ley 168-21, art. 80], then the document, the article, the article's title, which part of the article
+    the passage is, the page the article starts on and the file name. The text of the passage follows. The text
+    comes from scanned documents, so it has occasional stray characters. If none of the passages answers the
+    question, the corpus does not cover it.
     """
     try:
         vector = embeddings.embed_query(query, index.QUERY_EMBEDDINGS_FILE, embeddings.gemini_embedder())

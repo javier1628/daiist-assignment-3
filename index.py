@@ -145,6 +145,7 @@ class Document:
     one_item_per_chunk: frozenset[int] = frozenset()  # articles chunked one numbered item at a time
     in_initial_index: bool = True  # False for a document left to be added later through the add-document tool
     table_row: re.Pattern[str] | None = None  # a line that is one row of a table, in a document that has tables
+    short: str = ""  # how the document is named in a citation tag; the file name without ".pdf" when empty
 
 
 @dataclass
@@ -161,6 +162,7 @@ DOCUMENTS = {
             filename="ley-168-21.pdf",
             url="https://oea.aduanas.gob.do/media/1499/ley_general_aduanas_168-21.pdf",
             name="Ley 168-21 de Aduanas",
+            short="Ley 168-21",
             headers=LEY_HEADERS,
             page_number_after="header: PAG.",
             fixes=(("Artículo 22 9.-", "Artículo 229.-"),),
@@ -173,6 +175,7 @@ DOCUMENTS = {
                 "-de-la-ley-n%C3%BAm-168-21-de-aduanas.pdf"
             ),
             name="Decreto 755-22, Reglamento de aplicación de la Ley 168-21 de Aduanas",
+            short="Decreto 755-22",
             extract=pypdf_page_layer,
             headers=DECREE_HEADERS,
         ),
@@ -180,12 +183,14 @@ DOCUMENTS = {
             filename="decreto-609-24.pdf",
             url="https://aduanas.gob.do/media/zcflhflg/decreto-609-24-reglamento-operadores-aduaneros.pdf",
             name="Decreto 609-24, Reglamento de aplicación del Título III de la Ley 168-21 de Aduanas",
+            short="Decreto 609-24",
             headers=DECREE_HEADERS,
         ),
         Document(
             filename="norma-01-2023.pdf",
             url="https://aduanas.gob.do/media/as3hx2ml/norma-general-01-2023-ajuste-tasas-por-servicios.pdf",
             name="Norma General 01-2023, ajuste de las tasas por servicios de la DGA",
+            short="Norma 01-2023",
             ordinal_headings=True,
             in_initial_index=False,
             table_row=re.compile(r"(?:RD|US)\$ [\d,]+\.\d\d$"),  # a fee: "... RD$ 4,000.00"
@@ -569,6 +574,13 @@ def article_label(source: str, number: int) -> str:
     if document_for(source).ordinal_headings:
         return ORDINAL_NAMES[number]
     return f"Artículo {number}"
+
+
+def citation_tag(source: str, number: int) -> str:
+    """The fixed form in which an article is cited in an answer: "[Ley 168-21, art. 80]", "[Norma 01-2023, PRIMERO]"."""
+    document = document_for(source)
+    label = ORDINAL_NAMES[number] if document.ordinal_headings else f"art. {number}"
+    return f"[{document.short or Path(source).stem}, {label}]"
 
 
 def heading(chunk: Chunk) -> str:

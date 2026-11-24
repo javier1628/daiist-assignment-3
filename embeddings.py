@@ -35,6 +35,7 @@ TOKENS_PER_MINUTE = 20_000
 CHARS_PER_TOKEN = 3  # low on purpose, so that tokens are over-estimated
 MINUTE_LIMIT_RETRIES = 3
 DEFAULT_RETRY_SECONDS = 60.0
+REQUEST_TIMEOUT = 60  # seconds one embedding request may take; without it an unanswered request waits forever
 
 Embed = Callable[[list[str]], list[list[float]]]  # texts -> one vector per text, in the same order
 
@@ -128,7 +129,9 @@ def gemini_embedder(model: str = MODEL, dimension: int = DIMENSION, client=None,
 
             from api_key import load_api_key
 
-            client = genai.Client(api_key=load_api_key())
+            client = genai.Client(
+                api_key=load_api_key(), http_options=types.HttpOptions(timeout=REQUEST_TIMEOUT * 1000)  # milliseconds
+            )
         contents = [types.Content(parts=[types.Part.from_text(text=text)]) for text in texts]
         config = types.EmbedContentConfig(output_dimensionality=dimension)
         waits = 0

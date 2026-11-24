@@ -7,6 +7,7 @@ from index import (
     Chunk,
     add_document,
     citation,
+    citation_tag,
     chunk_record,
     document_for,
     embedded_text,
@@ -214,3 +215,11 @@ def test_only_an_existing_pdf_can_be_added(tmp_path):
         add_document(tmp_path / "missing.pdf", collection, FakeEmbedder(), tmp_path / "embeddings.jsonl")
     with pytest.raises(ValueError, match="PDF"):
         add_document(notes, collection, FakeEmbedder(), tmp_path / "embeddings.jsonl")
+
+
+def test_the_citation_tag_is_the_short_document_name_and_the_article_or_ordinal():
+    assert citation_tag("ley-168-21.pdf", 80) == "[Ley 168-21, art. 80]"
+    assert citation_tag("decreto-755-22.pdf", 148) == "[Decreto 755-22, art. 148]"
+    assert citation_tag("decreto-609-24.pdf", 4) == "[Decreto 609-24, art. 4]"
+    assert citation_tag("norma-01-2023.pdf", 1) == "[Norma 01-2023, PRIMERO]"
+    assert citation_tag("resolucion-12-2024.pdf", 3) == "[resolucion-12-2024, art. 3]"  # a file the corpus does not know
