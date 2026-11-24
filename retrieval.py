@@ -14,6 +14,8 @@ from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+import snowballstemmer
+
 import index
 
 # The one retrieval setting: "<mode>:<k>". The mode is how chunks are ranked
@@ -26,7 +28,9 @@ CANDIDATES = 50  # how deep each ranking goes before the two are fused
 RRF_K = 60  # the usual constant of reciprocal rank fusion
 BM25_K1, BM25_B = 1.5, 0.75  # the usual BM25 settings
 
-# Spanish words that say nothing about the topic, without accents because tokens are folded.
+STEMMER = snowballstemmer.stemmer("spanish")  # "calculan", "cálculo" and "calcular" all become "calcul"
+
+# Spanish words that say nothing about the topic, written without accents.
 STOP_WORDS = frozenset(
     """
     a al algo alguna algunas alguno algunos ante antes aquel aquella aquellas aquellos asi aun aunque cada como con
@@ -59,15 +63,26 @@ def current_setting() -> Setting:
     return read_setting(os.environ.get(SETTING_VARIABLE))
 
 
+def fold(text: str) -> str:
+    """The text without accents or other marks: "pública" -> "publica", "años" -> "anos"."""
+    decomposed = unicodedata.normalize("NFD", text)
+    return "".join(character for character in decomposed if unicodedata.category(character) != "Mn")
+
+
 def tokens(text: str) -> list[str]:
-    """Words for keyword search: lower case, accents folded, stop words and single letters dropped."""
-    decomposed = unicodedata.normalize("NFD", text.lower())
-    folded = "".join(character for character in decomposed if unicodedata.category(character) != "Mn")
-    return [
-        token
-        for token in re.findall(r"[a-z0-9]+", folded)
-        if token not in STOP_WORDS and (len(token) > 1 or token.isdigit())
-    ]
+    """Words for keyword search: lower case, stop words and single letters dropped, stemmed, accents folded.
+
+    Chunks and questions both go through here. A word is stemmed as it is
+    written and folded afterwards, because the stemmer reads the accents:
+    "garantía" and "garantías" share a stem, the unaccented "garantia" does not.
+    """
+    found = []
+    for word in re.findall(r"[a-z0-9áéíóúüñ]+", text.lower()):
+        plain = fold(word)
+        if plain in STOP_WORDS or (len(plain) == 1 and not plain.isdigit()):
+            continue
+        found.append(fold(STEMMER.stemWord(word)))
+    return found
 
 
 class BM25:

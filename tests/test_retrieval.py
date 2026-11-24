@@ -30,14 +30,28 @@ def retriever(tmp_path) -> Retriever:
     return Retriever(collection)
 
 
-def test_tokens_are_lower_case_without_accents_or_stop_words():
+def test_tokens_are_lower_case_stems_without_accents_or_stop_words():
     assert tokens("¿Sobre qué VALOR se calculan los impuestos de importación?") == [
-        "valor", "calculan", "impuestos", "importacion",
+        "valor", "calcul", "impuest", "import",
     ]
 
 
 def test_tokens_keep_numbers_and_drop_single_letters():
-    assert tokens("Ley 168-21, artículo 5, literal b)") == ["ley", "168", "21", "articulo", "5", "literal"]
+    assert tokens("Ley 168-21, artículo 5, literal b)") == ["ley", "168", "21", "articul", "5", "literal"]
+
+
+def test_forms_of_the_same_word_give_the_same_token():
+    assert tokens("calculan") == tokens("cálculo") == tokens("calcular") == ["calcul"]
+    assert tokens("impuestos") == tokens("impuesto")
+    assert tokens("importaciones") == tokens("importación") == tokens("IMPORTACION")
+    assert tokens("garantías") == tokens("garantía")
+
+
+def test_tokens_stay_plain_ascii_after_stemming():
+    found = tokens("Los AÑOS de la compañía, la señalización pública y el güiro")
+
+    assert found and all(token.isascii() and token.isalnum() for token in found)
+    assert tokens("AÑOS") == tokens("años")
 
 
 def test_bm25_ranks_the_document_with_the_rarer_query_word_first_and_leaves_out_those_with_none():
