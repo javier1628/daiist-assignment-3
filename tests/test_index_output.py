@@ -9,11 +9,13 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from embeddings import DIMENSION, cache_key, load_cache
+from embeddings import DIMENSION, cache_key, load_cache, query_prompt
 from index import (
     CHROMA_DIR, CHUNK_LIMIT, EMBEDDINGS_FILE, Article, chunk_article, chunk_record, document_for, heading,
-    initial_chunks, open_collection, split_pieces,
+    initial_chunks, open_collection, open_snapshot, split_pieces,
 )
+from index import QUERY_EMBEDDINGS_FILE
+from retrieval import Retriever
 
 ARTICLES_FILE = Path(__file__).resolve().parent.parent / "index" / "articles.jsonl"
 LIMITS = (200, 300, 400, 500)  # the chunk sizes of the dry run in CORPUS.md
@@ -201,3 +203,33 @@ def test_every_stored_vector_is_the_one_saved_for_its_embedded_text(chunks, stor
     for metadata, vector in zip(stored["metadatas"], stored["embeddings"]):
         assert len(vector) == DIMENSION
         assert np.allclose(vector, cache[cache_key(metadata["embedded_text"])], atol=1e-6)
+
+
+# --- ranking the saved index (the question's vector is read from the cache: no API call) ---
+
+CACHED_QUESTION = "¿Sobre qué valor se calculan los impuestos de importación?"
+
+
+@pytest.fixture(scope="module")
+def question_vector():
+    return load_cache(QUERY_EMBEDDINGS_FILE)[cache_key(query_prompt(CACHED_QUESTION))]
+
+
+def test_six_fresh_loads_of_the_index_return_an_identical_top_50_for_the_same_question(question_vector):
+    rankings = [Retriever(open_snapshot()).by_vector(question_vector, 50) for _ in range(6)]
+
+    assert len(rankings[0]) == len(set(rankings[0])) == 50
+    assert all(ranking == rankings[0] for ranking in rankings)
+
+
+def test_the_vector_ranking_is_the_exact_cosine_order_of_the_saved_vectors(chunks, question_vector):
+    saved = load_cache(EMBEDDINGS_FILE)
+    question = question_vector / np.linalg.norm(question_vector)
+    similarity = {}
+    for chunk in chunks:
+        chunk_id, _, metadata = chunk_record(chunk)
+        vector = saved[metadata["embedding_key"]].astype("float64")
+        similarity[chunk_id] = float(vector @ question / np.linalg.norm(vector))
+    exact = sorted(similarity, key=lambda chunk_id: (-similarity[chunk_id], chunk_id))[:50]
+
+    assert Retriever(open_snapshot()).by_vector(question_vector, 50) == exact

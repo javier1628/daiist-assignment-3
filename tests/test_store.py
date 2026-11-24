@@ -12,7 +12,6 @@ from index import (
     embedded_text,
     heading,
     index_document,
-    nearest,
     open_collection,
     store_chunks,
 )
@@ -111,19 +110,6 @@ def test_chunks_of_other_documents_are_left_alone(tmp_path):
 
     assert result == (1, 1)
     assert sorted(open_collection(tmp_path).get()["ids"]) == ["decreto-609-24.pdf#6#1", "ley-168-21.pdf#6#1"]
-
-
-def test_nearest_returns_the_closest_chunks_first_with_what_a_citation_needs(tmp_path):
-    store_chunks(open_collection(tmp_path, create=True), [FIVE, SIX_A, SIX_B], VECTORS)
-
-    results = nearest(open_collection(tmp_path), [0.1, 0.9, 0.2], k=2)
-
-    assert [result["id"] for result in results] == ["ley-168-21.pdf#6#1", "ley-168-21.pdf#6#2"]
-    assert results[0]["text"] == "Artículo 6.- Zona de jurisdicción aduanera."
-    assert (results[0]["source"], results[0]["article"], results[0]["part"], results[0]["page"]) == (
-        "ley-168-21.pdf", 6, 1, 12,
-    )
-    assert results[0]["distance"] < results[1]["distance"]
 
 
 # --- ordinal provisions and documents the corpus does not know ---------------

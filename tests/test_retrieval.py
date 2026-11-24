@@ -47,6 +47,13 @@ def test_forms_of_the_same_word_give_the_same_token():
     assert tokens("garantías") == tokens("garantía")
 
 
+def test_a_word_gives_the_same_token_with_or_without_its_accents():
+    assert tokens("garantia") == tokens("garantía") == tokens("GARANTÍA")
+    assert tokens("regimen aduanero") == tokens("régimen aduanero")
+    assert tokens("articulo") == tokens("artículo")
+    assert tokens("garantías") == tokens("garantia")  # and the plural still joins them
+
+
 def test_tokens_stay_plain_ascii_after_stemming():
     found = tokens("Los AÑOS de la compañía, la señalización pública y el güiro")
 
@@ -110,3 +117,33 @@ def test_results_are_shown_as_a_numbered_citation_followed_by_the_text(retriever
         "[1] Ley 168-21 de Aduanas — Artículo 124 — Precio base de la subasta — part 1 — page 134 — ley-168-21.pdf\n"
         "Artículo 124.- El precio base de la subasta incluye los tributos."
     )
+
+
+def test_keywords_match_whichever_side_lost_its_accents(tmp_path):
+    accented = chunk(42, "Artículo 42.- Los agentes deberán depositar una garantía.", "Rendición de garantía")
+    plain = chunk(43, "ARTICULO 43. La garantia se hara efectiva.", "")
+    other = chunk(44, "Artículo 44.- El plazo es de treinta días.", "Plazo")
+    collection = open_collection(tmp_path, create=True)
+    vectors = {cache_key(embedded_text(item)): [1.0, 0.0, 0.0] for item in (accented, plain, other)}
+    store_chunks(collection, [accented, plain, other], vectors)
+    found = Retriever(collection)
+
+    assert set(found.by_keywords("garantia", 5)) == {"ley-168-21.pdf#42#1", "ley-168-21.pdf#43#1"}
+    assert set(found.by_keywords("garantía", 5)) == {"ley-168-21.pdf#42#1", "ley-168-21.pdf#43#1"}
+
+
+def test_the_vector_ranking_is_exact_and_chunks_that_tie_come_in_the_order_of_their_ids(tmp_path):
+    first = chunk(7, "Artículo 7.- Uno.", "Uno")
+    twin = chunk(3, "Artículo 3.- Otro con el mismo vector.", "Otro")
+    far = chunk(9, "Artículo 9.- Lejos.", "Lejos")
+    collection = open_collection(tmp_path, create=True)
+    vectors = {
+        cache_key(embedded_text(first)): [1.0, 0.0, 0.0],
+        cache_key(embedded_text(twin)): [2.0, 0.0, 0.0],  # same direction as the first, another length
+        cache_key(embedded_text(far)): [0.0, 0.0, 1.0],
+    }
+    store_chunks(collection, [first, twin, far], vectors)  # stored 7, 3, 9: the tie is not settled by that order
+
+    ranking = Retriever(collection).by_vector([0.9, 0.0, 0.1], 3)
+
+    assert ranking == ["ley-168-21.pdf#3#1", "ley-168-21.pdf#7#1", "ley-168-21.pdf#9#1"]

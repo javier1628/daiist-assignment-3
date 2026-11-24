@@ -667,19 +667,6 @@ def store_chunks(collection, chunks: list[Chunk], vectors: Mapping[str, Sequence
     return len(changed), len(stale)
 
 
-def nearest(collection, vector: Sequence[float], k: int) -> list[dict]:
-    """The k stored chunks closest to a vector, closest first, each with its text and metadata."""
-    found = collection.query(
-        query_embeddings=[vector], n_results=k, include=["documents", "metadatas", "distances"]
-    )
-    return [
-        {"id": chunk_id, "distance": distance, "text": text, **metadata}
-        for chunk_id, distance, text, metadata in zip(
-            found["ids"][0], found["distances"][0], found["documents"][0], found["metadatas"][0]
-        )
-    ]
-
-
 @dataclass
 class AddResult:
     source: str

@@ -4,8 +4,13 @@ keywords fused. server.py and evaluate.py both use it.
 
 Nothing in this file calls the API: the vector of the question is passed in,
 and the keyword side is computed here from the stored chunk texts.
+
+Chunks are ranked by exact cosine similarity over the vectors read from the
+index, not by ChromaDB's own search. That search is approximate and rebuilt
+on every load, so the same question could get a different ranking on each run.
 """
 
+import functools
 import math
 import os
 import re
@@ -14,6 +19,7 @@ from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+import numpy as np
 import snowballstemmer
 
 import index
@@ -28,7 +34,8 @@ CANDIDATES = 50  # how deep each ranking goes before the two are fused
 RRF_K = 60  # the usual constant of reciprocal rank fusion
 BM25_K1, BM25_B = 1.5, 0.75  # the usual BM25 settings
 
-STEMMER = snowballstemmer.stemmer("spanish")  # "calculan", "cálculo" and "calcular" all become "calcul"
+# "calculan", "calculo" and "calcular" all become "calcul". Stems are remembered: the corpus repeats its words.
+stem = functools.lru_cache(maxsize=None)(snowballstemmer.stemmer("spanish").stemWord)
 
 # Spanish words that say nothing about the topic, written without accents.
 STOP_WORDS = frozenset(
@@ -70,19 +77,17 @@ def fold(text: str) -> str:
 
 
 def tokens(text: str) -> list[str]:
-    """Words for keyword search: lower case, stop words and single letters dropped, stemmed, accents folded.
+    """Words for keyword search: lower case, accents folded, stop words and single letters dropped, stemmed.
 
-    Chunks and questions both go through here. A word is stemmed as it is
-    written and folded afterwards, because the stemmer reads the accents:
-    "garantía" and "garantías" share a stem, the unaccented "garantia" does not.
+    Chunks and questions both go through here. Accents are folded before
+    stemming, so a word matches whether or not either side wrote its accents:
+    "garantia", "garantía" and "garantías" all become "garanti".
     """
-    found = []
-    for word in re.findall(r"[a-z0-9áéíóúüñ]+", text.lower()):
-        plain = fold(word)
-        if plain in STOP_WORDS or (len(plain) == 1 and not plain.isdigit()):
-            continue
-        found.append(fold(STEMMER.stemWord(word)))
-    return found
+    return [
+        stem(word)
+        for word in re.findall(r"[a-z0-9]+", fold(text.lower()))
+        if word not in STOP_WORDS and (len(word) > 1 or word.isdigit())
+    ]
 
 
 class BM25:
@@ -125,19 +130,28 @@ class Retriever:
     """The chunks of a saved index, ready to be ranked for a question."""
 
     def __init__(self, collection):
-        self.collection = collection
-        stored = collection.get(include=["documents", "metadatas"])
-        self.ids = list(stored["ids"])
+        stored = collection.get(include=["documents", "metadatas", "embeddings"])
+        # Sorted by id, so that ties are settled the same way whatever order the store returns its chunks in.
+        order = sorted(range(len(stored["ids"])), key=lambda position: stored["ids"][position])
+        self.ids = [stored["ids"][position] for position in order]
         self.records = {
-            chunk_id: {"id": chunk_id, "text": text, **metadata}
-            for chunk_id, text, metadata in zip(stored["ids"], stored["documents"], stored["metadatas"])
+            stored["ids"][position]: {
+                "id": stored["ids"][position],
+                "text": stored["documents"][position],
+                **stored["metadatas"][position],
+            }
+            for position in order
         }
+        vectors = np.asarray([stored["embeddings"][position] for position in order], dtype=np.float64)
+        self.vectors = vectors / np.linalg.norm(vectors, axis=1, keepdims=True)  # unit length: a dot product is the cosine
         # Keywords are matched against the same text the vectors were made from: heading and chunk.
         self.bm25 = BM25([tokens(self.records[chunk_id]["embedded_text"]) for chunk_id in self.ids])
 
     def by_vector(self, vector: Sequence[float], count: int) -> list[str]:
-        found = index.nearest(self.collection, vector, min(count, len(self.ids)))
-        return [result["id"] for result in found]
+        """The chunks most similar to a vector by exact cosine similarity, best first."""
+        question = np.asarray(vector, dtype=np.float64)
+        similarity = self.vectors @ (question / np.linalg.norm(question))
+        return [self.ids[position] for position in np.argsort(-similarity, kind="stable")[:count]]
 
     def by_keywords(self, question: str, count: int) -> list[str]:
         return [self.ids[position] for position in self.bm25.rank(tokens(question))[:count]]

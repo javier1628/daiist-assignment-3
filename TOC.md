@@ -5,6 +5,7 @@ Written by `scripts/write_toc.py` from `index/articles.jsonl`. Each document is 
 - **Page** is the page of the PDF the article starts on. **Words** counts the article after cleaning.
 - Titles and headings are as extracted from the scans, so some carry OCR errors. An article without a title shows how its text starts instead.
 - In `eval/questions.csv`, an article is written as its file name in `expected_source` (for example `ley-168-21.pdf`) and `Artículo N` in `expected_location`.
+- The last section, **Cross-references between the law and its reglamentos**, pairs law articles with the reglamento articles that cite them.
 
 ## Ley 168-21 de Aduanas (`ley-168-21.pdf`)
 
@@ -1658,3 +1659,177 @@ Written by `scripts/write_toc.py` from `index/articles.jsonl`. Each document is 
 | 62 | Interpretación homogénea y derecho supletorio | 37 | 74 |
 | 63 | Derogaciones | 37 | 150 |
 | 64 | Entrada en vigor | 38 | 30 |
+
+## Cross-references between the law and its reglamentos
+
+Found by pattern in the cleaned text, not by reading, so check a pair before relying on it. The text is OCR: a citation or a deferral whose words were misread is not here.
+
+### Pairs: a reglamento article that cites a numbered article of the law
+
+56 pairs: 35 reglamento articles cite 41 articles of the law. ★ marks a law article that also defers to the reglamento in its own words (next table). *(implied)* marks a citation that does not name the law next to the number: it is counted because the number is beyond the reglamento's own last article.
+
+| Law art. | Law title | Page | Cited by | Its title | Page |
+| ---: | --- | ---: | --- | --- | ---: |
+| 25 | Coordinación de funciones | 45 | Decreto 755-22 art. 13 | Gestión coordinada del riesgo | 7 |
+| 25 | Coordinación de funciones | 45 | Decreto 755-22 art. 15 | (no title) | 8 |
+| 26 | Deber de información y colaboración a cargo de otras autoridades | 46 | Decreto 755-22 art. 13 | Gestión coordinada del riesgo | 7 |
+| 26 | Deber de información y colaboración a cargo de otras autoridades | 46 | Decreto 755-22 art. 15 | (no title) | 8 |
+| 27 | Riesgo y análisis de riesgo | 46 | Decreto 609-24 art. 22 | Evaluación del riesgo para la obtención de licencias de los operadores aduaneros | 15 |
+| 28 | Gestión de riesgo | 46 | Decreto 755-22 art. 13 | Gestión coordinada del riesgo | 7 |
+| 28 | Gestión de riesgo | 46 | Decreto 755-22 art. 15 | (no title) | 8 |
+| 28 | Gestión de riesgo | 46 | Decreto 609-24 art. 22 | Evaluación del riesgo para la obtención de licencias de los operadores aduaneros | 15 |
+| 43 ★ | Validación | 54 | Decreto 609-24 art. 35 | Exámenes de suficiencia | 24 |
+| 44 ★ | Licencia | 55 | Decreto 609-24 art. 38 | Calidad de intransferible de la licencia de agente aduanal de persona física | 26 |
+| 69 | Causas de amonestación escrita comunes a todos los operadores aduaneros | 66 | Decreto 755-22 art. 247 | Forma de apertura | 107 |
+| 82 ★ | Nacimiento de la obligación tributaria aduanera | 75 | Decreto 755-22 art. 143 | Inicio del proceso de despacho aduanero | 60 |
+| 88 | Monto prudencial | 77 | Decreto 755-22 art. 70 | Determinación de oficio de la Obligación Tributaria Aduanera | 33 |
+| 101 | Plazo para el pago | 83 | Decreto 755-22 art. 80 | En cuanto a los intereses indemnizatorios de la obligación tributaria aduanera no pagada | 36 |
+| 112 | Abandono de hecho | 87 | Decreto 755-22 art. 81 | Prescripción para el caso de los regímenes liberatorios | 36 |
+| 112 | Abandono de hecho | 87 | Decreto 755-22 art. 82 | Abandono de hecho | 36 |
+| 121 | Subasta pública | 92 | Decreto 755-22 art. 88 | Subasta de mercancías abandonadas | 40 |
+| 121 | Subasta pública | 92 | Decreto 755-22 art. 91 | De las subastas electrónicas | 41 |
+| 123 | Procedimiento | 92 | Decreto 755-22 art. 91 | De las subastas electrónicas | 41 |
+| 128 | Retiro de mercancías en abandono | 94 | Decreto 755-22 art. 92 | (no title) | 42 |
+| 168 | Plazo para la justificación de bultos cargados o descargados de más o de menos | 110 | Decreto 755-22 art. 89 | Otros supuestos de subasta de mercancías y excepciones | 40 |
+| 168 | Plazo para la justificación de bultos cargados o descargados de más o de menos | 110 | Decreto 755-22 art. 121 | Eximentes de responsabilidad | 53 |
+| 169 | Responsables de justificar los bultos cargados o descargados de más o de menos | 110 | Decreto 755-22 art. 89 | Otros supuestos de subasta de mercancías y excepciones | 40 |
+| 170 | Rectificación del manifiesto de carga | 111 | Decreto 755-22 art. 89 | Otros supuestos de subasta de mercancías y excepciones | 40 |
+| 170 | Rectificación del manifiesto de carga | 111 | Decreto 755-22 art. 121 | Eximentes de responsabilidad | 53 |
+| 176 ★ | Estimación de avería | 115 | Decreto 755-22 art. 134 | Comisión para estimación de averias y mermas | 57 |
+| 183 | Plazo para el embarque | 119 | Decreto 755-22 art. 139 | Autorización de embarque | 59 |
+| 184 | Autorización de embarque | 119 | Decreto 755-22 art. 139 | Autorización de embarque | 59 |
+| 185 | Rechazo del embarque | 120 | Decreto 755-22 art. 139 | Autorización de embarque | 59 |
+| 185 | Rechazo del embarque | 120 | Decreto 755-22 art. 140 | Rechazo del embarque | 59 |
+| 188 | Embarques con despachos parciales o fraccionados | 121 | Decreto 755-22 art. 138 | Embarques con despachos parciales o fraccionados | 59 |
+| 198 ★ | Obligación de declarar | 125 | Decreto 755-22 art. 144 | De los casos que no requieren declaración de aduanas | 62 |
+| 199 | Plazo para declarar | 126 | Decreto 755-22 art. 146 | De la prórroga del plazo para la presentación de la declaración | 63 |
+| 199 | Plazo para declarar | 126 | Decreto 755-22 art. 152 | De la modalidad de declaraciones incompleta | 72 |
+| 201 | Aceptación de la declaración | 127 | Decreto 755-22 art. 143 | Inicio del proceso de despacho aduanero | 60 |
+| 204 | Documentos que deben acompañar la declaración | 128 | Decreto 755-22 art. 156 | (no title) | 74 |
+| 210 ★ | Examen previo | 130 | Decreto 755-22 art. 146 | De la prórroga del plazo para la presentación de la declaración | 63 |
+| 218 | Aceptación a trámite | 134 | Decreto 755-22 art. 143 | Inicio del proceso de despacho aduanero | 60 |
+| 324 | Exención de otras mercancías | 181 | Decreto 755-22 art. 144 | De los casos que no requieren declaración de aduanas | 62 |
+| 325 | Aprovisionamiento de a bordo y suministros | 181 | Decreto 755-22 art. 144 | De los casos que no requieren declaración de aduanas | 62 |
+| 326 | Exención | 182 | Decreto 755-22 art. 144 | De los casos que no requieren declaración de aduanas | 62 |
+| 328 | Circunstancias agravantes | 183 | Decreto 755-22 art. 34 | Obligaciones de los sujetos de fiscalización | 17 |
+| 335 | Sanciones | 186 | Decreto 755-22 art. 234 | Aplicación de las circunstancias agravantes de la defraudación aduanera | 102 |
+| 341 | Contrabando de mercancías | 189 | Decreto 755-22 art. 233 | Configuración de las tipologías de contrabando | 102 |
+| 355 | Multa a las faltas | 196 | Decreto 755-22 art. 236 | Interés por comisión de faltas | 103 |
+| 356 ★ | Eximente de responsabilidad | 196 | Decreto 755-22 art. 122 | (no title) | 53 |
+| 357 ★ | Criterios de gradualidad | 198 | Decreto 755-22 art. 269 | Acuerdo de pago | 117 |
+| 370 | Faltas tributarias aduaneras | 205 | Decreto 755-22 art. 235 | Configuración de la falta tributaria de mercancías encontradas de más | 103 |
+| 373 | Faltas aduaneras | 207 | Decreto 755-22 art. 121 | Eximentes de responsabilidad | 53 |
+| 373 | Faltas aduaneras | 207 | Decreto 755-22 art. 122 | (no title) | 53 |
+| 373 | Faltas aduaneras | 207 | Decreto 755-22 art. 261 | Supuestos permitidos | 115 |
+| 373 | Faltas aduaneras | 207 | Decreto 609-24 art. 15 | Cambio de apoderado especial | 11 |
+| 373 | Faltas aduaneras | 207 | Decreto 609-24 art. 40 | Cambio de auxiliar | 26 |
+| 374 | Sanciones a faltas aduaneras | 209 | Decreto 755-22 art. 93 | Mercancía de prohibida importación | 43 |
+| 374 | Sanciones a faltas aduaneras | 209 | Decreto 755-22 art. 146 *(implied)* | De la prórroga del plazo para la presentación de la declaración | 63 |
+| 395 | Decomiso administrativo | 219 | Decreto 755-22 art. 89 | Otros supuestos de subasta de mercancías y excepciones | 40 |
+
+### Law articles that defer to the reglamento
+
+89 articles of the law mention the reglamento. The column of words shows 6 words before the mention and 3 after it.
+
+#### Specific deferrals (48)
+
+The reglamento alone is named as where the rule is set (`que establezca el reglamento`, `mediante reglamento`, `reglamentariamente`). The last column lists the reglamento articles that cite the law article by number; many deferrals are answered by articles that do not cite it, so an empty cell does not mean the reglamento is silent.
+
+| Art. | Title | Page | Words of the deferral | Reglamento articles that cite it |
+| ---: | --- | ---: | --- | --- |
+| 13 | Recursos financieros | 30 | ... por servicios será establecida en el reglamento, las cuales serán |  |
+| 31 | Atribuciones de los órganos fiscalizadores | 48 | ... si así se determina en el reglamento a esta ley, |  |
+| 33 | Operadores aduaneros | 50 | ... terminales, públicas o privadas; Párrafo: Mediante reglamento podrán identificarse otros |  |
+| 34 | Requisitos | 51 | ... operadores aduaneros, serán establecidos en el reglamento de aplicación de |  |
+| 41 | Agentes de Aduanas | 53 | ... de Aduanas serán establecidos en el reglamento a la presente |  |
+| 43 | Validación | 54 | ... en la forma que establezca el Reglamento a esta ley. | Decreto 609-24 art. 35 |
+| 44 | Licencia | 55 | ... de los requisitos establecidos en el reglamento. La licencia de (+1 more) | Decreto 609-24 art. 38 |
+| 59 | Depositario de mercancías | 61 | ... perjuicio de las demás funciones contempladas reglamentariamente, son consideradas, en |  |
+| 61 | Obligaciones | 62 | ... conformidad a lo establecido en el reglamento, para responder por (+2 more) |  |
+| 64 | Requisitos para operar, formalidades y obligaciones de las empresas de servicios de entrega rápida | 64 | ... envíos de entrega rápida serán establecidas reglamentariamente. |  |
+| 66 | Consolidador internacional de carga | 64 | ... de conformidad con los requisitos establecidos reglamentariamente. |  |
+| 67 | Sanciones | 65 | ... reglas y procedimientos previstos en el reglamento, las siguientes sanciones: (+1 more) |  |
+| 72 | Criterios de gradualidad para la suspensión de la licencia | 71 | ... gradualidad de proporcionalidad serán establecidos mediante reglamento en esta ley. |  |
+| 75 | Disposición de la información | 72 | ... disposiciones aduaneras, conforme a las normas reglamentarias. |  |
+| 82 | Nacimiento de la obligación tributaria aduanera | 75 | ... medios que se establezcan en el reglamento a esta ley. | Decreto 755-22 art. 143 |
+| 111 | Abandono expreso | 87 | ... y otras condiciones dispuestas en el reglamento. |  |
+| 122 | Sujeción normativa de la subasta | 92 | ... realización de la subasta. En el reglamento podrá contemplarse que |  |
+| 130 | Mercancías en mal estado, inservibles o prohibidas | 95 | ... en el plazo establecido en el reglamento o la entrega |  |
+| 136 | Saldo del producto de la subasta | 97 | ... proporción que se determine en el reglamento de aplicación de |  |
+| 154 | Finalización de la descarga y reporte de inconsistencias | 105 | ... término que se establezca en el reglamento M3 de esta |  |
+| 171 | Fuero aduanero | 113 | ... conformidad con lo que establezca el reglamento de esta ley (+1 more) |  |
+| 176 | Estimación de avería | 115 | ... estimación de averías se establecerá mediante reglamento. | Decreto 755-22 art. 134 |
+| 180 | Entrada de la carga a zona primaria para embarque | 117 | ... exigidos por Aduanas establecidos en su reglamento. Párrafo IV: Los |  |
+| 187 | Expedición indirecta | 121 | ... expedición indirecta serán establecidos en el reglamento de la presente |  |
+| 198 | Obligación de declarar | 125 | ... personales, conforme las cantidades establecidas vía reglamento por la Dirección (+1 more) | Decreto 755-22 art. 144 |
+| 200 | Para la salida de mercancías del territorio aduanero 3. dominicano por vía marítima | 126 | ... la Dirección General de Aduanas, mediante reglamento, establecerá los plazos |  |
+| 203 | Responsabilidad en la declaración | 127 | ... la declaración aduanera será establecida mediante reglamento. Párrafo IV: La (+1 more) |  |
+| 210 | Examen previo | 130 | ... examen previo se establecerán en el reglamento de esta ley. | Decreto 755-22 art. 146 |
+| 219 | Corrección | 134 | ... que no hubo ilícito aduanero. El reglamento a esta ley |  |
+| 220 | Rectificación de la declaración | 135 | ... en esta ley. 9) Párrafo: El reglamento a esta ley |  |
+| 231 | Verificación, inspección o aforo físico y documental | 141 | ... un plazo mayor. Párrafo II: Mediante reglamento podrá establecerse las |  |
+| 251 | Plazo de permanencia | 150 | ... de los plazos que fije el reglamento, para lo cual |  |
+| 252 | Garantía | 151 | ... forma e instrumentos que fije el reglamento a esta ley, |  |
+| 253 | Controles | 151 | ... caso del numeral uno (1), el Reglamento a esta ley |  |
+| 259 | Salida temporal para perfeccionamiento pasivo | 155 | ... que establezca la ley. Párrafo: Mediante reglamento se deberán disponer |  |
+| 260 | Incorporación de valor a las mercancías | 156 | ... será determinada de acuerdo con el reglamento de valoración aduanera |  |
+| 280 | Drawback o reintegro | 166 | ... a futuras importaciones. Párrafo II: Mediante reglamento se dispondrá los |  |
+| 289 | Liberación de impuestos y derechos | 169 | ... su legislación especial y las normas reglamentarias. .UW PA& 170 |  |
+| 301 | Centros logísticos | 174 | ... (15) años renovables conforme a los reglamentos establecidos. |  |
+| 309 | Procedimiento simplificado de despacho | 176 | ... declaración que deberá establecerse en el reglamento de aplicación de |  |
+| 312 | Formalidades para operar | 177 | ... requisitos que se detallan en el reglamento de esta ley. |  |
+| 314 | Manifiesto de carga expresa o manifiesto courier | 177 | ... y LyV) formalidades establecidos en el reglamento. |  |
+| 316 | Valor aduanero | 178 | ... factura, se aplicarán las disposiciones del reglamento sobre valoración de |  |
+| 356 | Eximente de responsabilidad | 196 | ... procedimiento, y plazo previsto en el reglamento a esta ley. | Decreto 755-22 art. 122 |
+| 357 | Criterios de gradualidad | 198 | ... daño 5S causado. Párrafo: En el reglamento se establecerá el | Decreto 755-22 art. 269 |
+| 401 | Atribuciones del CNFC | 221 | ... Dominicana; y, 11) Otras funciones establecidas Reglamentariamente. M A/^ Si |  |
+| 403 | Sistema de ventanilla única de comercio exterior | 223 | ... de Aduanas. Párrafo II: Mediante el reglamento se establecerá la |  |
+| 417 | Reglamento de aplicación | 228 | ... Artículo 417.- Reglamento de aplicación. El (+1 more) |  |
+
+#### General formula only (41)
+
+The reglamento is only named in passing, next to the law or another body of rules (`esta ley y su reglamento`, `la ley, su reglamento y ...`, `legales y reglamentarias`).
+
+| Art. | Title | Page | Words |
+| ---: | --- | ---: | --- |
+| 3 | Ámbito de aplicación | 8 | ... de aplicación. Esta ley y sus reglamentos regulan el ejercicio |
+| 4 | Definiciones | 8 | ... de la presente ley y su reglamento. 16) Auxiliar del (+3 more) |
+| 5 | Territorio aduanero | 28 | ... establecidas en esta ley y sus reglamentos. Párrafo II: Las |
+| 11 | Dirección General de Aduanas | 29 | ... en la presente Ley y sus reglamentos, en virtud de |
+| 17 | Potestad aduanera | 34 | ... atribuciones que esta ley y sus reglamentos de aplicación otorgan |
+| 18 | Atribuciones | 34 | ... General de Aduanas y sus cr reglamentos de administración interna (+1 more) |
+| 20 | Formas para el ejercicio del control aduanero | 40 | ... establecido en esta ley y sus reglamentos, mediante las siguientes |
+| 28 | Gestión de riesgo | 46 | ... en las leyes y en los reglamentos. Párrafo II: Para |
+| 29 | De la fiscalización aduanera | 47 | ... establecidos en esta ley y sus reglamentos. |
+| 37 | Apoderados especiales de Aduanas | 52 | ... fijados en esta ley y su reglamento. |
+| 53 | Sujeción disciplinaria | 59 | ... de la presente ley y su reglamentación complementaria. |
+| 87 | Autodeterminación | 76 | ... de la presente ley y suí reglamentos, presumiéndose siempre la |
+| 89 | Revisión de la determinación | 77 | ... establecidos en esta ley y sus reglamentos. |
+| 120 | Exigibilidad | 91 | ... que establecen esta ley y su reglamento. |
+| 132 | Tratamiento de mercancías procedentes de naufragios u otros accidentes o sin titular conocido | 96 | ... en esta 0 ley y su reglamento. |
+| 137 | Ingreso, arribo o salida de mercancías, vehículos y unidades de transporte | 98 | ... establecido en la ley y su reglamento. |
+| 139 | Recepción legal de medios de transporte | 99 | ... exigibles por las normas legales y reglamentarias, cuya aplicación compete |
+| 142 | Transmisión de la información previa a la llegada o salida de los medios de transporte | 99 | ... por la presente ley y su reglamento, será efectuada anticipadamente |
+| 148 | Cambio de ruta | 103 | ... disposiciones de esta ley y demás reglamentos al respecto. |
+| 164 | Ingreso por vía terrestre | 109 | ... establecida en esta ley y su reglamento, para el tratamiento |
+| 179 | Salida de mercancías | 116 | ... establecidos en esta ley y su reglamento. |
+| 194 | Aplicación | 123 | ... En la presente ley y su reglamento se dispondrá además |
+| 209 | Rechazo de la declaración de exportación | 130 | ... establecido en esta ley y su reglamento, la declaración de |
+| 218 | Aceptación a trámite | 134 | ... declarante de las formalidades legales y reglamentarias, para aplicar al |
+| 226 | Funcionario y lugar para la verificación | 139 | ... acuerdo con esta ley y su reglamento. |
+| 229 | Verificación, aforo o inspección documental | 140 | ... que disponga esta ley y su reglamento. |
+| 238 | Discrepancias con el resultado de la verificación | 144 | ... en esta ley y ¡J su reglamento, cuando se detecten |
+| 239 | Cumplimiento de formalidades | 145 | ... prevista en esta ley y su reglamento de aplicación. |
+| 242 | Procedimientos, requisitos y condiciones | 146 | ... establecidos en las disposiciones legales y reglamentarias vigentes. |
+| 247 | Regímenes temporales o suspensivos de derechos | 148 | ... que establecen las leyes y sus reglamentos respectivos, en consecuencia |
+| 255 | Traspasos permitidos | 153 | ... establecidas en esta ley y su reglamento, siempre que dichas |
+| 275 | Regímenes aduaneros devolutivos | 164 | ... procedimientos establecidos en esta ley, su reglamento o leyes especiales. |
+| 291 | Nacionalización de mercancías en tránsito | 170 | ... de todos los requisitos legales y reglamentarios para su destinación |
+| 294 | Estado, seguridad y ruta de mercancías | 171 | ... formalidades exigidas en la ley, su reglamento y disposiciones administrativas. |
+| 304 | Normativa aplicable | 175 | ... disposiciones de esta ley y sus reglamentos, en todo lo |
+| 317 | Responsabilidades | 178 | ... que señala esta ley y su reglamento. Párrafo: Las empresas |
+| 360 | Procedimiento administrativo sancionador | 200 | ... disposiciones de la presente ley, su reglamento de aplicación y |
+| 373 | Faltas aduaneras | 207 | ... prescritas en la misma y su reglamento de aplicación; 3) (+1 more) |
+| 404 | Operador económico autorizado | 224 | ... conformidad con esta ley y sus reglamentos. Párrafo II: La |
+| 413 | Reestructuración institucional | 227 | ... contenidas en esta ley y su reglamento, que reorganiza los |
+| 414 | Facilitación de medidas | 227 | ... en la presente ley y su reglamento. |
